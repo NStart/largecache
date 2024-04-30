@@ -63,3 +63,17 @@ func readKeyFromEntry(data []byte) string {
 
 	return bytesToString(dst)
 }
+
+func compareKeyFromEntry(data []byte, key string) bool {
+	length := binary.LittleEndian.Uint16(data[timestampSizeInBytes+hashSizeInBytes:])
+
+	return bytesToString(data[headerSizeInBytes:headerSizeInBytes+length]) == key
+}
+
+func readHashFromEntry(data []byte) uint64 {
+	return binary.LittleEndian.Uint64(data[timestampSizeInBytes:])
+}
+
+func resetHashFromEntry(data []byte) {
+	binary.LittleEndian.PutUint16(data[timestampSizeInBytes:], 0)
+}
