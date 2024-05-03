@@ -6,12 +6,12 @@ const (
 	timestampSizeInBytes = 8
 	hashSizeInBytes      = 8
 	keySizeInBytes       = 2
-	headerSizeInBytes    = timestampSizeInBytes + hashSizeInBytes + keySizeInBytes
+	headersSizeInBytes    = timestampSizeInBytes + hashSizeInBytes + keySizeInBytes
 )
 
 func wrapEntry(timestamp uint64, hash uint64, key string, entry []byte, buffer *[]byte) []byte {
 	keyLength := len(key)
-	blobLength := len(entry) + headerSizeInBytes + keyLength
+	blobLength := len(entry) + headersSizeInBytes + keyLength
 
 	if blobLength > len(*buffer) {
 		*buffer = make([]byte, blobLength)
@@ -21,8 +21,8 @@ func wrapEntry(timestamp uint64, hash uint64, key string, entry []byte, buffer *
 	binary.LittleEndian.PutUint64(blob, timestamp)
 	binary.LittleEndian.PutUint64(blob[timestampSizeInBytes:], hash)
 	binary.LittleEndian.PutUint16(blob[timestampSizeInBytes+hashSizeInBytes:], uint16(keyLength))
-	copy(blob[headerSizeInBytes:], key)
-	copy(blob[headerSizeInBytes+keyLength:], entry)
+	copy(blob[headersSizeInBytes:], key)
+	copy(blob[headersSizeInBytes+keyLength:], entry)
 
 	return blob[:blobLength]
 }
@@ -45,8 +45,8 @@ func appendToWrappedEntry(timestamp uint64, wrappedEntry []byte, entry []byte, b
 func readEntry(data []byte) []byte {
 	length := binary.LittleEndian.Uint16(data[timestampSizeInBytes+hashSizeInBytes:])
 
-	dst := make([]byte, len(data)-int(headerSizeInBytes+length))
-	copy(dst, data[headerSizeInBytes+length:])
+	dst := make([]byte, len(data)-int(headersSizeInBytes+length))
+	copy(dst, data[headersSizeInBytes+length:])
 
 	return dst
 }
@@ -59,7 +59,7 @@ func readKeyFromEntry(data []byte) string {
 	length := binary.LittleEndian.Uint16(data[timestampSizeInBytes+hashSizeInBytes:])
 
 	dst := make([]byte, length)
-	copy(dst, data[headerSizeInBytes:headerSizeInBytes+length])
+	copy(dst, data[headersSizeInBytes:headersSizeInBytes+length])
 
 	return bytesToString(dst)
 }
@@ -67,7 +67,7 @@ func readKeyFromEntry(data []byte) string {
 func compareKeyFromEntry(data []byte, key string) bool {
 	length := binary.LittleEndian.Uint16(data[timestampSizeInBytes+hashSizeInBytes:])
 
-	return bytesToString(data[headerSizeInBytes:headerSizeInBytes+length]) == key
+	return bytesToString(data[headersSizeInBytes:headersSizeInBytes+length]) == key
 }
 
 func readHashFromEntry(data []byte) uint64 {
