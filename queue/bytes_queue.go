@@ -166,6 +166,11 @@ func (q *BytesQueue) Peek() ([]byte, error) {
 	return data, err
 }
 
+func (q *BytesQueue) Get(index int) ([]byte, error) {
+	data, _, err := q.peek(index)
+	return data, err
+}
+
 func (q *BytesQueue) CheckGet(index int) error {
 	return q.peekCheckErr(index)
 }
