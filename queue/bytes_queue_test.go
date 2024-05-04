@@ -9,15 +9,45 @@ import (
 	"testing"
 )
 
-// func TestPushAndPop(t *testing.T) {
-// 	t.Parallel()
+func TestPushAndPop(t *testing.T) {
+	t.Parallel()
 
-// 	queue := NewBytesQueue(10, 10, true)
-// 	entry := []byte("hello")
+	queue := NewBytesQueue(10, 10, true)
+	entry := []byte("hello")
 
-// 	_, err := queue.Pop()
+	_, err := queue.Pop()
+	assertEqual(t, "Empty queue", err.Error())
 
-// }
+	queue.Push(entry)
+
+	assertEqual(t, entry, pop(queue))
+}
+
+func TestUnchangeEntriesIndexesAfterAdditionalMemoryAllocationWhereTialIsBeforeHead(t *testing.T) {
+	t.Parallel()
+
+	queue := NewBytesQueue(100, 0, false)
+
+	queue.Push(blob('a', 70))
+	index, _ := queue.Push(blob('a', 10))
+	queue.Pop()
+	queue.Push(blob('c', 30))
+	newesIndex, _ := queue.Push(blob('d', 40))
+
+	assertEqual(t, 20, queue.Capacity())
+	assertEqual(t, blob('b', 10), get(queue, index))
+	assertEqual(t, blob('d', 40), get(queue, newesIndex))
+}
+
+func TestAllocateAddtionalSpaceFormValueBiggerThanInitQueue(t *testing.T) {
+	t.Parallel()
+
+	queue := NewBytesQueue(11, 0, false)
+
+	queue.Push(blob('a', 100))
+	assertEqual(t, blob('a', 100), pop(queue))
+	assertEqual(t, 224, queue.Capacity())
+}
 
 func TestAllocateAdditionalSpaceFormValueBiggerThanQueue(t *testing.T) {
 	t.Parallel()
