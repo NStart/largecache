@@ -73,7 +73,7 @@ func TestPopWholeQueue(t *testing.T) {
 	queue.Push([]byte("b"))
 	queue.Pop()
 	queue.Pop()
-	queue.push([]byte("c"))
+	queue.Push([]byte("c"))
 
 	assertEqual(t, 13, queue.Capacity())
 	assertEqual(t, []byte("c"), pop(queue))
