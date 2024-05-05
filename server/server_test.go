@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"largecache"
 	"net/http/httptest"
@@ -177,5 +178,28 @@ func TestClearCache(t *testing.T) {
 }
 
 func TestGetStats(t *testing.T) {
+	t.Parallel()
+	var testStats largecache.Stats
 
+	req := httptest.NewRequest("GET", testBaseString+"/api/v1/stats", nil)
+	rr := httptest.NewRecorder()
+
+	if err := cache.Set("incrementStass", []byte("123")); err != nil {
+		t.Errorf("error setting cache value. error %s", err)
+	}
+
+	if _, err := cache.Get("incrementStats"); err != nil {
+		t.Errorf("can't find incrementStats. error : %s", err)
+	}
+
+	getCacheHandler(rr, req)
+	resp := rr.Result()
+
+	if err := json.NewDecoder(resp.Body).Decode(&testStats); err != nil {
+		t.Errorf("error decoding cache stats. error: %s", err)
+	}
+
+	if testStats.Hits == 0 {
+		t.Errorf("want: > 0; got: 0\n\thandler not properly returning stats info.")
+	}
 }
