@@ -35,3 +35,9 @@ func TestEntriesIntera(t *testing.T) {
 
 	assertEqual(t, keysCount, len(keys))
 }
+
+func TestEntriesInteratorWithMostShardsEmpty(t *testing.T) {
+	t.Parallel()
+
+	clock := m
+}

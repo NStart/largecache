@@ -114,7 +114,7 @@ func (it *EntryInfoIterator) setCurrentEntry() bool {
 	return entryNotFound
 }
 
-func newInterator(cache *LargeCache) *EntryInfoIterator {
+func newIterator(cache *LargeCache) *EntryInfoIterator {
 	elements, count := cache.shards[0].copyHashedKeys()
 
 	return &EntryInfoIterator{
@@ -126,7 +126,7 @@ func newInterator(cache *LargeCache) *EntryInfoIterator {
 	}
 }
 
-func (it *EntryInfoIterator) value() (EntryInfo, error) {
+func (it *EntryInfoIterator) Value() (EntryInfo, error) {
 	if !it.valid {
 		return emptyEntryInfo, ErrInvalidIteratorState
 	}

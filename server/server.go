@@ -1,9 +1,12 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"largecache"
+	"log"
+	"net/http"
 	"os"
 )
 
@@ -46,4 +49,25 @@ func main() {
 		fmt.Printf("LargeCache HTTP Server v%s", version)
 		os.Exit(0)
 	}
+
+	var logger *log.Logger
+	if logfile == "" {
+		logger = log.New(os.Stdout, "", log.LstdFlags)
+	} else {
+		f, err := os.OpenFile(logfile, os.O_APPEND|os.O_WRONLY, 0600)
+		if err != nil {
+			panic(err)
+		}
+		logger := log.New(f, "", log.LstdFlags)
+	}
+
+	var err error
+	cache, err = largecache.New(context.Background(), config)
+	if err != nil {
+		logger.Fatal(err)
+	}
+
+	logger.Print("cache initialised.")
+
+	http.Handle(cacheClearPath, serviceLoader())
 }

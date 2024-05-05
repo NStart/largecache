@@ -186,8 +186,8 @@ func (c *LargeCache) keyMetadata(key string) Metadata {
 	return shard.getKeyMetadataWithLock(hashedKey)
 }
 
-func (c *LargeCache) Interator() *EntryInfoIterator {
-	return newInterator(c)
+func (c *LargeCache) Iterator() *EntryInfoIterator {
+	return newIterator(c)
 }
 
 func (c *LargeCache) onEvict(oldestEntry []byte, currentTimestamp uint64, evict func(reason RemoveReason) error) bool {
