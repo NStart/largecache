@@ -65,4 +65,22 @@ func newLargeCache(ctx context.Context, config Config, clock clock) (*LargeCache
 		shardMask:  uint64(config.Shards - 1),
 		close:      make(chan struct{}),
 	}
+
+	var onRemove func(wrappedEntry []byte, reason RemoveReason)
+	if config.OnRemoveWithMetadata != nil {
+		onRemove = cache.pro
+	}
+}
+
+
+func (c *LargeCache) getShard(hashKey uint64) (shard *cacheShard) {
+	return c.shards[hashKey&c.shardMask]
+}
+
+func (c *LargeCache) provideOnRemoveWithMetadata(wrappedEntry []byte, reason RemoveReason) {
+	key := readKeyFromEntry()
+
+	hashKey := c.hash.Sum64(key)
+	shards := c.getShard(hashKey)
+	c.config.OnRemoveWithMetadata(key, readEntry(wrappedEntry), shards.)
 }
