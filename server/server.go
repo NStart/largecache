@@ -59,7 +59,7 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
-		logger := log.New(f, "", log.LstdFlags)
+		logger = log.New(f, "", log.LstdFlags)
 	}
 
 	var err error
