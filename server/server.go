@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 )
 
 const (
@@ -69,5 +70,12 @@ func main() {
 
 	logger.Print("cache initialised.")
 
-	http.Handle(cacheClearPath, serviceLoader())
+	http.Handle(cacheClearPath, serviceLoader(cacheClearHandler(), requestMetrics(logger)))
+	http.Handle(cachePath, serviceLoader(cacheIndexHandler(), requestMetrics(logger)))
+	http.Handle(statsPath, serviceLoader(statsIndexHandler(), requestMetrics(logger)))
+
+	logger.Printf("starting server on :%d", port)
+
+	strPort := ":" + strconv.Itoa(port)
+	log.Fatal("ListenAndServe: ", http.ListenAndServe(strPort, nil))
 }
