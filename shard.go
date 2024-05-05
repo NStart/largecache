@@ -366,7 +366,7 @@ func (s *cacheShard) getKeyMetadataWithLock(key uint64) Metadata {
 	}
 }
 
-func (s *cacheShard) getMetadata(key uint64) Metadata {
+func (s *cacheShard) getKeyMetadata(key uint64) Metadata {
 	return Metadata{
 		RequestCount: s.hashmapStats[key],
 	}

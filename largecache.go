@@ -3,6 +3,7 @@ package largecache
 import (
 	"context"
 	"errors"
+	"time"
 )
 
 const (
@@ -32,7 +33,7 @@ const (
 )
 
 func New(ctx context.Context, config Config) (*LargeCache, error) {
-	//return
+	return newLargeCache(ctx, config, &systemClock{})
 }
 
 func newLargeCache(ctx context.Context, config Config, clock clock) (*LargeCache, error) {
@@ -68,12 +69,37 @@ func newLargeCache(ctx context.Context, config Config, clock clock) (*LargeCache
 
 	var onRemove func(wrappedEntry []byte, reason RemoveReason)
 	if config.OnRemoveWithMetadata != nil {
-		onRemove = cache.provideOnRemoveWithMetadata
+		onRemove = cache.providedOnRemoveWithMetadata
 	} else if config.OnRemove != nil {
 		onRemove = cache.providedOnRemove
 	} else if config.OnRemoveWithReason != nil {
-		//onRemove = cache.Pro
+		onRemove = cache.providedOnRemoveWithReason
+	} else {
+		onRemove = cache.notProvidedOnRemove
 	}
+
+	for i := 0; i < config.Shards; i++ {
+		cache.shards[i] = initNewShard(config, onRemove, clock)
+	}
+
+	if config.CleanWindow > 0 {
+		go func() {
+			ticker := time.NewTicker(config.CleanWindow)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case t := <-ticker.C:
+					cache.cleanUp(uint64(t.Unix()))
+				case <-cache.close:
+					return
+				}
+			}
+		}()
+	}
+
+	return cache, nil
 }
 
 func (c *LargeCache) Close() error {
@@ -202,9 +228,9 @@ func (c *LargeCache) notProvidedOnRemove(wrappedEntry []byte, reason RemoveReaso
 }
 
 func (c *LargeCache) providedOnRemoveWithMetadata(wrappedEntry []byte, reason RemoveReason) {
-	key := readKeyFromEntry()
+	key := readKeyFromEntry(wrappedEntry)
 
 	hashKey := c.hash.Sum64(key)
 	shards := c.getShard(hashKey)
-	c.config.OnRemoveWithMetadata(key, readEntry(wrappedEntry), shards.)
+	c.config.OnRemoveWithMetadata(key, readEntry(wrappedEntry), shards.getKeyMetadata(hashKey))
 }
