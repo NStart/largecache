@@ -5,5 +5,5 @@ import (
 )
 
 var (
-	EntryNotFoundError = errors.New("Entry not found")
+	ErrEntryNotFound = errors.New("Entry not found")
 )
