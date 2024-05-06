@@ -221,7 +221,323 @@ func TestEntryNotFound(t *testing.T) {
 func TestTimingEviction(t *testing.T) {
 	t.Parallel()
 
-	//clock :=
+	clock := mockedClock{value: 0}
+	cache, _ := newLargeCache(context.Background(), Config{
+		Shards:             1,
+		LifeWindow:         time.Second,
+		MaxEntriesInWindow: 1,
+		MaxEntriesSize:     256,
+	}, &clock)
+
+	cache.Set(1)
+	cache.Set("key2", []byte("value2"))
+	_, err := cache.Get("key")
+
+	noError(t, err)
+
+	clock.set(5)
+	cache.Set("key2", []byte("value2"))
+	_, err = cache.Get("key")
+
+	assertEqual(t, ErrEntryNotFound, err)
+}
+
+func TestTimintEvictionShouldEvctOnlyFromUpdatedShard(t *testing.T) {
+	t.Parallel()
+
+	clock := mockedClock{value: 0}
+	cache, _ := newLargeCache(context.Background(), Config{
+		Shards:             4,
+		LifeWindow:         time.Second,
+		MaxEntriesInWindow: 1,
+		MaxEntriesSize:     256,
+	}, &clock)
+
+	cache.Set("key", []byte("value"))
+	clock.set(5)
+	cache.Set("key2", []byte("value 2"))
+	value, err := cache.Get("key")
+
+	noError(t, err)
+	assertEqual(t, []byte("value"), value)
+}
+
+func TestCleanShouldEvictAll(t *testing.T) {
+	t.Parallel()
+
+	cache, _ := New(context.Background(), Config{
+		Shards:             4,
+		LifeWindow:         time.Second,
+		MaxEntriesInWindow: 1,
+		MaxEntriesSize:     256,
+	})
+
+	cache.Set("key", []byte("value"))
+	<-time.After(3 * time.Second)
+	value, err := cache.Get("key")
+
+	assertEqual(t, ErrEntryNotFound, err)
+	assertEqual(t, value, []byte(nil))
+}
+
+func TestOnRemoveCallBack(t *testing.T) {
+	t.Parallel()
+
+	clock := mockedClock{value: 0}
+	onRemoveInvoked := false
+	onRemoveExtInvoked := false
+	onRemove := func(key string, entry []byte) {
+		onRemoveInvoked = true
+		assertEqual(t, "key", key)
+		assertEqual(t, []byte("value"), entry)
+	}
+
+	onRemoveExt := func(key string, entry []byte, reason RemoveReason) {
+		onRemoveExtInvoked = true
+	}
+	cache, _ := newLargeCache(context.Background(), Config{
+		Shards:             1,
+		LifeWindow:         time.Second,
+		MaxEntriesInWindow: 1,
+		MaxEntriesSize:     256,
+		OnRemove:           onRemove,
+		OnRemoveWithReason: onRemoveExt,
+	}, &clock)
+
+	cache.Set("key", []byte("value"))
+	clock.set(5)
+	cache.Set("key2", []byte("value2"))
+
+	assertEqual(t, true, onRemoveInvoked)
+	assertEqual(t, false, onRemoveExtInvoked)
+}
+
+func TestOnRemoveWithReasonCallBack(t *testing.T) {
+	t.Parallel()
+
+	clock := mockedClock{value: 0}
+	onRemoveInvoked := false
+	onRemove := func(key string, entry []byte, reason RemoveReason) {
+		onRemoveInvoked = true
+		assertEqual(t, "key", key)
+		assertEqual(t, []byte("value"), entry)
+		assertEqual(t, reason, RemoveReason(Expried))
+	}
+	cache, _ := newLargeCache(context.Background(), Config{
+		Shards:             1,
+		LifeWindow:         time.Second,
+		MaxEntriesInWindow: 1,
+		MaxEntriesSize:     256,
+		OnRemoveWithReason: onRemove,
+	}, &clock)
+
+	cache.Set("key", []byte("value"))
+	clock.set(5)
+	cache.Set("key2", []byte("value2"))
+
+	assertEqual(t, true, onRemoveInvoked)
+}
+
+func TestOnRemoveFilter(t *testing.T) {
+	t.Parallel()
+
+	clock := mockedClock{value: 0}
+	onRemoveInvoked := false
+	onRemove := func(key string, entry []byte, reason RemoveReason) {
+		onRemoveInvoked = true
+	}
+	c := Config{
+		Shards:             1,
+		LifeWindow:         time.Second,
+		MaxEntriesInWindow: 1,
+		MaxEntriesSize:     256,
+		OnRemoveWithReason: onRemove,
+	}
+
+	cache, _ := newLargeCache(context.Background(), c, &clock)
+	cache.Set("key", []byte("value"))
+	clock.set(5)
+	cache.Set("key2", []byte("value2"))
+
+	assertEqual(t, false, onRemoveInvoked)
+
+	cache.Delete("keys")
+
+	assertEqual(t, true, onRemoveInvoked)
+}
+
+func TestOnRemoveFilterExpired(t *testing.T) {
+	//t.Parallel()
+
+	clock := mockedClock{value: 0}
+	onRemoveDeleted, onRemoveExpired := false, false
+	var err error
+	onRemove := func(key string, entry []byte, reason RemoveReason) {
+		switch reason {
+		case Deleted:
+			onRemoveDeleted = true
+		case Expried:
+			onRemoveExpired = true
+		}
+	}
+
+	c := Config{
+		Shards:             1,
+		LifeWindow:         3 * time.Second,
+		CleanWindow:        0,
+		MaxEntriesInWindow: 10,
+		MaxEntriesSize:     256,
+		OnRemoveWithReason: onRemove,
+	}
+
+	cache, err := newLargeCache(context.Background(), c, &clock)
+	assertEqual(t, err, nil)
+
+	onRemoveDeleted, onRemoveExpired = false, false
+	clock.set(5)
+	cache.cleanUp(uint64(clock.Epoch()))
+
+	err = cache.Delete("key")
+	assertEqual(t, err, ErrEntryNotFound)
+	assertEqual(t, false, onRemoveDeleted)
+	assertEqual(t, true, onRemoveExpired)
+
+	onRemoveDeleted, onRemoveExpired = false, false
+	clock.set(0)
+
+	cache.Set("key2", []byte("value2"))
+	err = cache.Delete("key2")
+	clock.set(5)
+	cache.cleanUp(uint64(clock.Epoch()))
+
+	assertEqual(t, err, nil)
+	assertEqual(t, true, onRemoveDeleted)
+	assertEqual(t, false, onRemoveExpired)
+}
+
+func TestOnRemoveGetEntryStats(t *testing.T) {
+	t.Parallel()
+
+	clock := mockedClock{value: 0}
+	count := uint32(0)
+	onRemove := func(key string, entry []byte, keyMetada Metadata) {
+		count = keyMetada.RequestCount
+	}
+	c := Config{
+		Shards:               1,
+		LifeWindow:           time.Second,
+		MaxEntriesInWindow:   1,
+		MaxEntriesSize:       256,
+		OnRemoveWithMetadata: onRemove,
+		StatsEnabled:         true,
+	}.OnRemoveFilterSet(Deleted, NoSpace)
+
+	cache, _ := newLargeCache(context.Background(), c, &clock)
+
+	cache.Set("key", []byte("value"))
+
+	for i := 0; i < 100; i++ {
+		cache.Get("key")
+	}
+
+	cache.Delete("key")
+
+	assertEqual(t, uint32(100), count)
+}
+
+func TestCacheLen(t *testing.T) {
+	t.Parallel()
+
+	cache, _ := New(context.Background(), Config{
+		Shards:             8,
+		LifeWindow:         time.Second,
+		MaxEntriesInWindow: 1,
+		MaxEntriesSize:     256,
+	})
+	keys := 1337
+
+	for i := 0; i < keys; i++ {
+		cache.Set(fmt.Sprintf("key%d", i), []byte("value"))
+	}
+
+	assertEqual(t, keys, cache.Len())
+}
+
+func TestCacheCapacity(t *testing.T) {
+	t.Parallel()
+
+	cache, _ := New(context.Background(), Config{
+		Shards:             8,
+		LifeWindow:         time.Second,
+		MaxEntriesInWindow: 1,
+		MaxEntriesSize:     256,
+	})
+	keys := 1337
+
+	for i := 0; i < keys; i++ {
+		cache.Set(fmt.Sprintf("key%d", i), []byte("value"))
+	}
+
+	assertEqual(t, keys, cache.Len())
+	assertEqual(t, 40960, cache.Capacity())
+}
+
+func TestCacheInitialCapacity(t *testing.T) {
+	t.Parallel()
+
+	cache, _ := New(context.Background(), Config{
+		Shards:             1,
+		LifeWindow:         time.Second,
+		MaxEntriesInWindow: 2 * 1024,
+		HardMaxCacheSize:   1,
+		MaxEntriesSize:     1024,
+	})
+
+	assertEqual(t, 0, cache.Len())
+	assertEqual(t, 1024*1024, cache.Capacity())
+
+	keys := 1024 * 1024
+	for i := 0; i < keys; i++ {
+		cache.Set(fmt.Sprintf("key%d", i), []byte("value"))
+	}
+
+	assertEqual(t, true, cache.Len() < keys)
+	assertEqual(t, 1024*1024, cache.Capacity())
+}
+
+func TestRemoveEntriesWhenShardIsFull(t *testing.T) {
+	t.Parallel()
+
+	cache, _ := New(context.Background(), Config{
+		Shards:             1,
+		LifeWindow:         100 * time.Second,
+		MaxEntriesInWindow: 100,
+		MaxEntriesSize:     256,
+		HardMaxCacheSize:   1,
+	})
+
+	value := blob('a', 1024*300)
+
+	cache.Set("key", value)
+	cache.Set("key", value)
+	cache.Set("key", value)
+	cache.Set("key", value)
+	cache.Set("key", value)
+	cacheValue, err := cache.Get("key")
+
+	noError(t, err)
+	assertEqual(t, value, cacheValue)
+}
+
+func TestCacheStats(t *testing.T) {
+	t.Parallel()
+
+	cache, _ := New(context.Background(), Config{
+		Shards:             8,
+		LifeWindow:         time.Second,
+		MaxEntriesInWindow: 1,
+		MaxEntriesSize:     256,
+	})
 }
 
 type mockedClock struct {
