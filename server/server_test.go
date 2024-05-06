@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
+	"errors"
 	"io"
 	"largecache"
 	"net/http/httptest"
@@ -177,5 +179,125 @@ func TestClearCache(t *testing.T) {
 }
 
 func TestGetStats(t *testing.T) {
+	t.Parallel()
+	var testStats largecache.Stats
 
+	req := httptest.NewRequest("GET", testBaseString+"/api/v1/stats", nil)
+	rr := httptest.NewRecorder()
+
+	if err := cache.Set("increamentStats", []byte("123")); err != nil {
+		t.Errorf("error settting cache value. error: %s", err)
+	}
+
+	if _, err := cache.Get("incrementStats"); err != nil {
+		t.Errorf("can't find incrementStats. error: %s", err)
+	}
+
+	getCacheHandler(rr, req)
+	resp := rr.Result()
+
+	if err := json.NewDecoder(resp.Body).Decode(&testStats); err != nil {
+		t.Errorf("error decoding cache stats. error: %s", err)
+	}
+
+	if testStats.Hits == 0 {
+		t.Errorf("want: > 0; got: 0.\n\thandler not properly returning stats info.")
+	}
+}
+
+func TestStatsIndex(t *testing.T) {
+	t.Parallel()
+	var testStats largecache.Stats
+
+	getreq := httptest.NewRequest("GET", testBaseString+"/api/v1/stats", nil)
+	putreq := httptest.NewRequest("PUT", testBaseString+"/api/v1/stats", nil)
+	rr := httptest.NewRecorder()
+
+	if err := cache.Set("incrementStats", []byte("123")); err != nil {
+		t.Errorf("error setting cache value. error: %s", err)
+	}
+
+	if _, err := cache.Get("incrementStats"); err != nil {
+		t.Errorf("can't find incrementStats. error: %s", err)
+	}
+
+	testHandlers := statsIndexHandler()
+	testHandlers.ServeHTTP(rr, getreq)
+	resp := rr.Result()
+
+	if err := json.NewDecoder(resp.Body).Decode(&testStats); err != nil {
+		t.Errorf("error decoding cache stats. error: %s", err)
+	}
+
+	if testStats.Hits == 0 {
+		t.Errorf("want: > 0.\n\thandler not properly returning stats info.")
+	}
+
+	testHandlers = statsIndexHandler()
+	testHandlers.ServeHTTP(rr, putreq)
+	resp = rr.Result()
+	_, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Errorf("cannot deserialise test response: %s", err)
+	}
+}
+
+func TestCacheIndexHandler(t *testing.T) {
+	getreq := httptest.NewRequest("GET", testBaseString+"/api/v1/cache/testkey", nil)
+	putreq := httptest.NewRequest("PUT", testBaseString+"/api/v1/cache/testkey", bytes.NewBuffer([]byte("123")))
+	delreq := httptest.NewRequest("DELETE", testBaseString+"/api/v1/cache/testkey", bytes.NewBuffer([]byte("123")))
+
+	getrr := httptest.NewRecorder()
+	putrr := httptest.NewRecorder()
+	delrr := httptest.NewRecorder()
+	testHandler := cacheIndexHandler()
+
+	testHandler.ServeHTTP(putrr, putreq)
+	resp := putrr.Result()
+	if resp.StatusCode != 201 {
+		t.Errorf("want: 201; got: %d.\n\tcan't put keys", resp.StatusCode)
+	}
+	testHandler.ServeHTTP(getrr, getreq)
+	resp = getrr.Result()
+	if resp.StatusCode != 200 {
+		t.Errorf("want: 200; got: %d.\n\tcan't get keys.", resp.StatusCode)
+	}
+
+	testHandler.ServeHTTP(delrr, delreq)
+	resp = delrr.Result()
+	if resp.StatusCode != 200 {
+		t.Errorf("want: 200; got: %d.\n\tcan't delete keys.", resp.StatusCode)
+	}
+}
+
+func TestInvalidPutWhenExceedShardCap(t *testing.T) {
+	t.Parallel()
+	req := httptest.NewRequest("PUT", testBaseString+"/api/v1/cache/putkey", bytes.NewBuffer([]byte("123")))
+	rr := httptest.NewRecorder()
+
+	putCacheHandler(rr, req)
+	resp := rr.Result()
+
+	if resp.StatusCode != 500 {
+		t.Errorf("want: 500; got: %d", resp.StatusCode)
+	}
+}
+
+func TestValidPutWhenReading(t *testing.T) {
+	t.Parallel()
+	req := httptest.NewRequest("PUT", testBaseString+"/api/v1/cache/putkey", errReader(0))
+	rr := httptest.NewRecorder()
+
+	putCacheHandler(rr, req)
+	resp := rr.Result()
+
+	if resp.StatusCode != 500 {
+		t.Errorf("want: 500; got: %d", resp.StatusCode)
+	}
+}
+
+type errReader int
+
+func (errReader) Read([]byte) (int, error) {
+	return 0, errors.New("test read error")
 }
