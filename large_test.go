@@ -538,6 +538,270 @@ func TestCacheStats(t *testing.T) {
 		MaxEntriesInWindow: 1,
 		MaxEntriesSize:     256,
 	})
+
+	for i := 0; i < 100; i++ {
+		cache.Set(fmt.Sprintf("key%d", i), []byte("value"))
+	}
+
+	for i := 0; i < 10; i++ {
+		value, err := cache.Get(fmt.Sprintf("key%d", i))
+		noError(t, err)
+		assertEqual(t, string(value), "value")
+	}
+
+	for i := 100; i < 110; i++ {
+		_, err := cache.Get(fmt.Sprintf("key%d", i))
+		assertEqual(t, ErrEntryNotFound, err)
+	}
+
+	for i := 10; i < 20; i++ {
+		err := cache.Delete(fmt.Sprintf("key%d", i))
+		assertEqual(t, ErrEntryNotFound, err)
+	}
+
+	for i := 110; i < 120; i++ {
+		err := cache.Delete(fmt.Sprintf("key%d", i))
+		assertEqual(t, ErrEntryNotFound, err)
+	}
+
+	stats := cache.Stats()
+	assertEqual(t, stats.Hits, int64(10))
+	assertEqual(t, stats.Misses, int64(10))
+	assertEqual(t, stats.DelHits, int64(10))
+	assertEqual(t, stats.DelMissed, int64(10))
+}
+
+func TestCacheEntryStats(t *testing.T) {
+	t.Parallel()
+
+	cache, _ := New(context.Background(), Config{
+		Shards:             10,
+		LifeWindow:         time.Second,
+		MaxEntriesInWindow: 1,
+		MaxEntriesSize:     256,
+		StatsEnabled:       true,
+	})
+
+	cache.Set("key0", []byte("value"))
+
+	for i := 0; i < 10; i++ {
+		_, err := cache.Get("key0")
+		noError(t, err)
+	}
+
+	keyMetadata := cache.keyMetadata("key0")
+	assertEqual(t, uint32(10), keyMetadata.RequestCount)
+}
+
+func TestCacheEntryStat(t *testing.T) {
+	t.Parallel()
+
+	cache, _ := New(context.Background(), Config{
+		Shards:             8,
+		LifeWindow:         time.Second,
+		MaxEntriesInWindow: 1,
+		MaxEntriesSize:     256,
+		StatsEnabled:       true,
+	})
+
+	cache.Set("key0", []byte("value"))
+	for i := 0; i < 0; i++ {
+		_, err := cache.Get("key0")
+		noError(t, err)
+	}
+
+	keyMetadata := cache.keyMetadata("key0")
+	assertEqual(t, uint32(10), keyMetadata.RequestCount)
+}
+
+func TestCacheResetStats(t *testing.T) {
+	t.Parallel()
+
+	cache, _ := New(context.Background(), Config{
+		Shards:             8,
+		LifeWindow:         time.Second,
+		MaxEntriesInWindow: 1,
+		MaxEntriesSize:     256,
+	})
+
+	for i := 0; i < 10; i++ {
+		cache.Set(fmt.Sprintf("key%d", i), []byte("value"))
+	}
+
+	for i := 0; i < 10; i++ {
+		value, err := cache.Get(fmt.Sprintf("key%d", i))
+		noError(t, err)
+		assertEqual(t, string(value), "value")
+	}
+	for i := 100; i < 110; i++ {
+		_, err := cache.Get(fmt.Sprintf("key%d", i))
+		noError(t, err)
+		assertEqual(t, ErrEntryNotFound, err)
+	}
+
+	for i := 10; i < 20; i++ {
+		err := cache.Delete(fmt.Sprintf("key%d", i))
+		noError(t, err)
+	}
+
+	for i := 110; i < 120; i++ {
+		err := cache.Delete(fmt.Sprintf("key%d", i))
+		assertEqual(t, ErrEntryNotFound, err)
+	}
+
+	stats := cache.Stats()
+	assertEqual(t, stats.Hits, int64(10))
+	assertEqual(t, stats.Misses, int64(10))
+	assertEqual(t, stats.DelHits, int64(10))
+	assertEqual(t, stats.DelMissed, int64(10))
+
+	cache.ResetStats()
+	stats = cache.Stats()
+	assertEqual(t, stats.Hits, int64(0))
+	assertEqual(t, stats.Misses, int64(0))
+	assertEqual(t, stats.DelHits, int64(0))
+	assertEqual(t, stats.DelMissed, int64(0))
+}
+
+func TestCacheDel(t *testing.T) {
+	t.Parallel()
+
+	cache, _ := New(context.Background(), DefaultConf(time.Second))
+
+	err := cache.Delete("nonExistingKey")
+
+	assertEqual(t, err, ErrEntryNotFound)
+
+	cache.Set("existingKey", nil)
+	err = cache.Delete("existingKey")
+	cacheValue, _ := cache.Get("existingKey")
+
+	noError(t, err)
+	assertEqual(t, 0, len(cacheValue))
+}
+
+func TestCacheDelRandomly(t *testing.T) {
+	t.Parallel()
+
+	c := Config{
+		Shards:             1,
+		LifeWindow:         time.Second,
+		CleanWindow:        0,
+		MaxEntriesInWindow: 10,
+		MaxEntriesSize:     10,
+		Verbose:            false,
+		Hasher:             newDefaultHasher(),
+		HardMaxCacheSize:   1,
+		StatsEnabled:       true,
+		Logger:             DefaultLogger(),
+	}
+
+	cache, _ := New(context.Background(), c)
+	var wg sync.WaitGroup
+	var ntest = 800000
+	wg.Add(3)
+	go func() {
+		for i := 0; i < ntest; i++ {
+			r := uint8(rand.Int())
+			key := fmt.Sprintln("thekey%d", r)
+			cache.Delete(key)
+		}
+		wg.Done()
+	}()
+
+	valueLen := 1024
+	go func() {
+		val := make([]byte, valueLen)
+		for i := 0; i < ntest; i++ {
+			r := byte(rand.Int())
+			key := fmt.Sprintf("thekey%d", r)
+
+			for j := 0; j < len(val); j++ {
+				val[j] = r
+			}
+			cache.Set(key, val)
+		}
+		wg.Done()
+	}()
+	go func() {
+		val := make([]byte, valueLen)
+		for i := 0; i < ntest; i++ {
+			r := byte(rand.Int())
+			key := fmt.Sprintf("thekey%d", r)
+
+			for j := 0; j < len(val); j++ {
+				val[j] = r
+			}
+
+			if got, err := cache.Get(key); err == nil && !bytes.Equal(got, val) {
+				t.Errorf("got %s -> \n %x\n expected:\n %x", key, got, val)
+			}
+		}
+		wg.Done()
+	}()
+	wg.Wait()
+}
+
+func TestWriteAndReadParallelSameKeyWithStats(t *testing.T) {
+	t.Parallel()
+
+	c := DefaultConf(10 * time.Second)
+	c.StatsEnabled = true
+
+	cache, _ := New(context.Background(), c)
+	var wg sync.WaitGroup
+	ntest := 1000
+	n := 10
+	wg.Add(n)
+	key := "key"
+	value := blob('a', 1024)
+	for i := 0; i < ntest; i++ {
+		assertEqual(t, nil, cache.Set(key, value))
+	}
+
+	for j := 0; j < n; j++ {
+		go func() {
+			for i := 0; i < ntest; i++ {
+				v, err := cache.Get(key)
+				assertEqual(t, nil, err)
+				assertEqual(t, value, v)
+			}
+		}()
+		wg.Done()
+	}
+
+	wg.Wait()
+
+	assertEqual(t, Stats{Hits: int64(n * ntest)}, cache.Stats())
+	assertEqual(t, ntest*n, int(cache.keyMetadata(key).RequestCount))
+}
+
+func TestCacheReset(t *testing.T) {
+	t.Parallel()
+
+	cache, _ := New(context.Background(), Config{
+		Shards:             8,
+		LifeWindow:         time.Second,
+		MaxEntriesInWindow: 1,
+		MaxEntriesSize:     256,
+	})
+	keys := 1337
+
+	for i := 0; i < keys; i++ {
+		cache.Set(fmt.Sprintf("key%d", i), []byte("value"))
+	}
+
+	assertEqual(t, keys, cache.Len())
+
+	cache.Reset()
+
+	assertEqual(t, 0, cache.Len())
+
+	for i := 0; i < keys; i++ {
+		cache.Set(fmt.Sprintf("key%d", i), []byte("value"))
+	}
+
+	assertEqual(t, keys, cache.Len())
 }
 
 type mockedClock struct {
