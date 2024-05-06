@@ -231,7 +231,7 @@ func TestTimingEviction(t *testing.T) {
 		MaxEntriesSize:     256,
 	}, &clock)
 
-	cache.Set(1)
+	clock.set(1)
 	cache.Set("key2", []byte("value2"))
 	_, err := cache.Get("key")
 
@@ -1084,7 +1084,7 @@ func TestLargeCache_GetWithInfo(t *testing.T) {
 	}
 }
 
-func TestLargeCahce_GetWithInfoCollision(t *testing.T) {
+func TestLargeCache_GetWithInfoCollision(t *testing.T) {
 	t.Parallel()
 
 	cache, _ := New(context.Background(), Config{
@@ -1096,7 +1096,7 @@ func TestLargeCahce_GetWithInfoCollision(t *testing.T) {
 		Hasher:             hashSub(5),
 	})
 
-	cache.Set("a", []byte(1))
+	cache.Set("a", []byte("1"))
 	cacheValue, resp, err := cache.GetWithInfo("a")
 
 	noError(t, err)
