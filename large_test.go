@@ -302,5 +302,49 @@ func TestLargecache_allocateAdditionalMemoryLeadPanic(t *testing.T) {
 	cache.Set("c", blob(0xff, 108))
 	cache.Set("d", blob(0xff, 1024))
 	ts += 4
-	clock.set("e", blob(0xff, 3))
+	cache.Set("e", blob(0xff, 3))
+	cache.Set("f", blob(0xff, 3))
+	cache.Set("g", blob(0xff, 3))
+	_, err := cache.Get("b")
+	assertEqual(t, err, ErrEntryNotFound)
+	data, _ := cache.Get("g")
+	assertEqual(t, []byte{0xff, 0xff, 0xff}, data)
+}
+
+func TestRemoveNonExpiredData(t *testing.T) {
+	onRemove := func(key string, entry []byte, reason RemoveReason) {
+		if reason != Deleted {
+			if reason == Expried {
+				t.Errorf("[%d]Expired OnRemove [%s]\n", reason, key)
+				t.FailNow()
+			} else {
+				time.Sleep(time.Second)
+			}
+		}
+	}
+
+	config := DefaultConf(10 * time.Minute)
+	config.HardMaxCacheSize = 1
+	config.MaxEntriesSize = 1024
+	config.MaxEntriesInWindow = 1024
+	config.OnRemoveWithReason = onRemove
+	cache, err := New(context.Background(), config)
+	noError(t, err)
+	defer func() {
+		err := cache.Close()
+		noError(t, err)
+	}()
+
+	data := func(l int) []byte {
+		m := make([]byte, 1)
+		_, err := rand.Read(m)
+		noError(t, err)
+		return m
+	}
+
+	for i := 0; i < 50; i++ {
+		key := fmt.Sprintf("key_%d", i)
+		err := cache.Set(key, data(800))
+		noError(t, err)
+	}
 }
