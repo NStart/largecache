@@ -804,6 +804,42 @@ func TestCacheReset(t *testing.T) {
 	assertEqual(t, keys, cache.Len())
 }
 
+func TestIterateOnResetCache(t *testing.T) {
+	t.Parallel()
+
+	cache, _ := New(context.Background(), Config{
+		Shards:             8,
+		LifeWindow:         time.Second,
+		MaxEntriesInWindow: 1,
+		MaxEntriesSize:     256,
+	})
+	keys := 1337
+
+	for i := 0; i < keys; i++ {
+		cache.Set(fmt.Sprintf("key%d", i), []byte("value"))
+	}
+	cache.Reset()
+
+	iterator := cache.Iterator()
+	assertEqual(t, false, iterator.SetNext())
+}
+
+func TestGetOnResetCache(t *testing.T) {
+	t.Parallel()
+
+	cache, _ := New(context.Background(), Config{
+		Shards:             8,
+		LifeWindow:         time.Second,
+		MaxEntriesInWindow: 1,
+		MaxEntriesSize:     256,
+	})
+	keys := 1337
+
+	for i := 0; i < keys; i++ {
+		cache.Set(fmt.Sprintf("key%d", i), []byte("value"))
+	}
+}
+
 type mockedClock struct {
 	value int64
 }
