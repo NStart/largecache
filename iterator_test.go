@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-func TestEntriesIntera(t *testing.T) {
+func TestEntriesIterator(t *testing.T) {
 	t.Parallel()
 
 	keysCount := 1000
@@ -36,8 +36,8 @@ func TestEntriesIntera(t *testing.T) {
 	assertEqual(t, keysCount, len(keys))
 }
 
-func TestEntriesInteratorWithMostShardsEmpty(t *testing.T) {
+func TestEntriesIteratorWithMostShardsEmpty(t *testing.T) {
 	t.Parallel()
 
-	clock := m
+	clock := moc
 }
