@@ -179,7 +179,7 @@ func TestParallelSetAndIteration(t *testing.T) {
 		MaxEntriesInWindow: 100,
 		MaxEntriesSize:     256,
 		HardMaxCacheSize:   1,
-		Verbose:            1,
+		Verbose:            true,
 	})
 
 	entrySize := 1024 * 100
